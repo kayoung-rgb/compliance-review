@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>컴플 검토</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard', sans-serif;
+      background: #f5f6f7;
+      height: 100dvh;
+      overflow: hidden;
+      color: #111;
+    }
+
+    /* ── 전체 레이아웃 ── */
+    #app { height: 100dvh; display: flex; align-items: center; justify-content: center; }
+
+    .review-layout {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      grid-template-rows: 48px 1fr;
+      width: 100%;
+      height: 100dvh;
+    }
+
+    /* ── 상단 헤더 ── */
+    .top-bar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .top-bar-title { font-size: 14px; font-weight: 600; color: #111; }
+    .top-bar-sub { font-size: 12px; color: #6b7280; }
+    .top-bar-dot { width: 3px; height: 3px; border-radius: 50%; background: #d1d5db; }
+
+    /* ── 왼쪽: 스크린샷 + 캔버스 ── */
+    .screenshot-pane {
+      background: #1c1c1e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .screenshot-wrap {
+      position: relative;
+      line-height: 0;
+      max-width: 90%;
+      max-height: 90%;
+    }
+
+    #screenshot-img {
+      display: block;
+      max-width: 100%;
+      max-height: 85dvh;
+      object-fit: contain;
+      border-radius: 4px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+    }
+
+    #ann-canvas {
+      position: absolute;
+      inset: 0;
+      cursor: default;
+      border-radius: 4px;
+    }
+
+    #ann-canvas.placing { cursor: crosshair; }
+
+    .placing-hint {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(59,130,246,0.9);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 20px;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .no-screenshot {
+      color: #6b7280;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    /* ── 오른쪽: 검토 패널 ── */
+    .review-pane {
+      background: #fff;
+      border-left: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .review-pane-header {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid #f0f0f0;
+      flex-shrink: 0;
+    }
+    .review-pane-header h3 { font-size: 13px; font-weight: 600; color: #374151; }
+    .review-pane-header .count {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 2px;
+    }
+    .review-pane-header .count span { color: #3b82f6; font-weight: 600; }
+
+    .violations-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* ── 위반 항목 카드 ── */
+    .vi-card {
+      border: 1.5px solid #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .vi-card.placing-active { border-color: #3b82f6; }
+    .vi-card.done-approved { border-color: #d1fae5; }
+    .vi-card.done-conditional { border-color: #fde68a; }
+    .vi-card.done-rejected { border-color: #fecaca; }
+
+    .vi-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: #f9fafb;
+      cursor: default;
+    }
+    .vi-card.done-approved .vi-header { background: #f0fdf4; }
+    .vi-card.done-conditional .vi-header { background: #fffbeb; }
+    .vi-card.done-rejected .vi-header { background: #fef2f2; }
+
+    .vi-num {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #6b7280;
+      color: #fff;
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .vi-card.done-approved .vi-num { background: #10b981; }
+    .vi-card.done-conditional .vi-num { background: #f59e0b; }
+    .vi-card.done-rejected .vi-num { background: #ef4444; }
+
+    .vi-title { font-size: 12px; font-weight: 500; flex: 1; line-height: 1.4; }
+
+    .vi-pin-btn {
+      flex-shrink: 0;
+      font-size: 11px;
+      color: #9ca3af;
+      background: none;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 2px 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.1s;
+    }
+    .vi-pin-btn:hover { border-color: #3b82f6; color: #3b82f6; }
+    .vi-pin-btn.pinned { border-color: #10b981; color: #10b981; }
+    .vi-pin-btn.placing { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
+
+    .vi-body { padding: 10px 12px; }
+
+    .vi-buttons {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .vi-btn {
+      flex: 1;
+      padding: 7px 4px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      background: #fff;
+      color: #374151;
+      transition: all 0.12s;
+    }
+    .vi-btn:hover { opacity: 0.75; }
+    .vi-btn.sel-approved { background: #ecfdf5; border-color: #10b981; color: #059669; font-weight: 600; }
+    .vi-btn.sel-conditional { background: #fffbeb; border-color: #f59e0b; color: #d97706; font-weight: 600; }
+    .vi-btn.sel-rejected { background: #fef2f2; border-color: #ef4444; color: #dc2626; font-weight: 600; }
+
+    .vi-comment {
+      width: 100%;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 12px;
+      line-height: 1.5;
+      resize: none;
+      outline: none;
+      font-family: inherit;
+      color: #374151;
+      transition: border-color 0.12s;
+      background: #fafafa;
+    }
+    .vi-comment:focus { border-color: #3b82f6; background: #fff; }
+
+    /* ── 하단 제출 영역 ── */
+    .review-footer {
+      padding: 12px 14px;
+      border-top: 1px solid #f0f0f0;
+      flex-shrink: 0;
+    }
+
+    .submit-progress {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .progress-bar-bg {
+      flex: 1;
+      height: 4px;
+      background: #f3f4f6;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: #3b82f6;
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+    .progress-text { font-size: 11px; color: #9ca3af; white-space: nowrap; }
+    .progress-text.done { color: #10b981; font-weight: 600; }
+
+    .submit-btn {
+      width: 100%;
+      padding: 11px;
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      font-family: inherit;
+    }
+    .submit-btn:hover:not(:disabled) { background: #2563eb; }
+    .submit-btn:disabled { background: #bfdbfe; cursor: not-allowed; }
+
+    /* ── 로딩 / 에러 / 완료 상태 ── */
+    .center-screen {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 40px;
+      text-align: center;
+    }
+    .center-screen .icon { font-size: 48px; }
+    .center-screen .title { font-size: 18px; font-weight: 600; }
+    .center-screen .desc { font-size: 13px; color: #6b7280; }
+
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── 스크롤바 ── */
+    .violations-list::-webkit-scrollbar { width: 4px; }
+    .violations-list::-webkit-scrollbar-track { background: transparent; }
+    .violations-list::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="center-screen">
+    <div class="spinner"></div>
+    <div class="desc">검토 데이터를 불러오는 중...</div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://irulwjmxnjtvlvyvjkax.supabase.co'
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlydWx3am14bmp0dmx2eXZqa2F4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NzAzODMsImV4cCI6MjA5NTU0NjM4M30.2z7l0knclzmvGQNVa830G6vz_JRgwYBs_nR-4SdEeFs'
+  const EDGE_URL = 'https://irulwjmxnjtvlvyvjkax.supabase.co/functions/v1'
+
+  const { createClient } = supabase
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  const params = new URLSearchParams(window.location.search)
+  const reviewId = params.get('review_id')
+
+  // ── 상태 ────────────────────────────────────────────────────────────────────
+  let review = null
+  let violations = []
+  // states[i] = { status: null|'approved'|'conditional'|'rejected', comment: '', markerX: null, markerY: null }
+  let states = []
+  let placingFor = null  // 마커 배치 중인 항목 인덱스
+
+  // ── 초기화 ──────────────────────────────────────────────────────────────────
+  async function init() {
+    if (!reviewId) return showError('리뷰 ID가 없습니다.', '슬랙 메시지의 검토하기 버튼을 다시 클릭해주세요.')
+
+    const { data, error } = await sb.from('compliance_reviews').select('*').eq('id', reviewId).single()
+    if (error || !data) return showError('검토 데이터를 찾을 수 없습니다.', '이미 삭제되었거나 잘못된 링크예요.')
+
+    review = data
+    violations = Array.isArray(data.violations) ? data.violations : []
+    states = violations.map(() => ({ status: null, comment: '', markerX: null, markerY: null }))
+
+    buildLayout()
+  }
+
+  // ── 전체 레이아웃 빌드 (1회) ─────────────────────────────────────────────────
+  function buildLayout() {
+    const app = document.getElementById('app')
+    app.innerHTML = `
+      <div class="review-layout">
+
+        <div class="top-bar">
+          <span class="top-bar-title">${esc(review.frame_name ?? '컴플 검토')}</span>
+          <div class="top-bar-dot"></div>
+          <span class="top-bar-sub">${esc(review.service_name ?? '')}</span>
+          <div class="top-bar-dot"></div>
+          <span class="top-bar-sub">검토가 필요한 부분 ${violations.length}건</span>
+        </div>
+
+        <div class="screenshot-pane" id="ss-pane">
+          ${review.preview_image_url
+            ? `<div class="screenshot-wrap" id="ss-wrap">
+                <img id="screenshot-img" src="${esc(review.preview_image_url)}" alt="화면 스크린샷" />
+                <canvas id="ann-canvas"></canvas>
+               </div>
+               <div class="placing-hint" id="placing-hint" style="display:none">
+                 스크린샷에서 위치를 클릭해주세요
+               </div>`
+            : `<div class="no-screenshot">스크린샷이 없습니다</div>`
+          }
+        </div>
+
+        <div class="review-pane">
+          <div class="review-pane-header">
+            <h3>항목별 검토</h3>
+            <div class="count" id="count-text">0 / ${violations.length} 완료</div>
+          </div>
+          <div class="violations-list" id="vi-list"></div>
+          <div class="review-footer">
+            <div class="submit-progress">
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+              </div>
+              <span class="progress-text" id="progress-label">0 / ${violations.length}</span>
+            </div>
+            <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">
+              검토 결과 보내기
+            </button>
+          </div>
+        </div>
+
+      </div>
+    `
+
+    buildViolationCards()
+    if (review.preview_image_url) setupCanvas()
+  }
+
+  // ── 위반 항목 카드 빌드 (1회) ────────────────────────────────────────────────
+  function buildViolationCards() {
+    const list = document.getElementById('vi-list')
+    violations.forEach((v, i) => {
+      const card = document.createElement('div')
+      card.className = 'vi-card'
+      card.id = `vi-${i}`
+      card.innerHTML = `
+        <div class="vi-header">
+          <div class="vi-num" id="vi-num-${i}">${i + 1}</div>
+          <div class="vi-title">${esc(v.title ?? `항목 ${i+1}`)}</div>
+          <button class="vi-pin-btn" id="vi-pin-${i}" onclick="startPlacing(${i})">📍 위치</button>
+        </div>
+        <div class="vi-body">
+          <div class="vi-buttons">
+            <button class="vi-btn" id="vi-btn-${i}-approved"  onclick="setStatus(${i},'approved')">✅ 승인</button>
+            <button class="vi-btn" id="vi-btn-${i}-conditional" onclick="setStatus(${i},'conditional')">⚠️ 조건부</button>
+            <button class="vi-btn" id="vi-btn-${i}-rejected"  onclick="setStatus(${i},'rejected')">❌ 반려</button>
+          </div>
+          <textarea class="vi-comment" id="vi-cmt-${i}" rows="2"
+            placeholder="코멘트를 입력해주세요 (선택)"
+            oninput="states[${i}].comment = this.value"
+          ></textarea>
+        </div>
+      `
+      list.appendChild(card)
+    })
+  }
+
+  // ── 상태 업데이트 (카드 UI 갱신) ────────────────────────────────────────────
+  function setStatus(index, status) {
+    states[index].status = status
+
+    const card = document.getElementById(`vi-${index}`)
+    card.className = `vi-card done-${status}`
+
+    ;['approved', 'conditional', 'rejected'].forEach(s => {
+      const btn = document.getElementById(`vi-btn-${index}-${s}`)
+      btn.className = `vi-btn${status === s ? ` sel-${s}` : ''}`
+    })
+
+    const cmt = document.getElementById(`vi-cmt-${index}`)
+    cmt.placeholder = status === 'approved'
+      ? '코멘트 (선택)'
+      : '수정이 필요한 내용을 입력해주세요'
+
+    drawMarkers()
+    updateProgress()
+  }
+
+  // ── 진행률 업데이트 ──────────────────────────────────────────────────────────
+  function updateProgress() {
+    const done = states.filter(s => s.status !== null).length
+    const total = violations.length
+    const pct = total > 0 ? (done / total) * 100 : 0
+
+    document.getElementById('progress-fill').style.width = pct + '%'
+
+    const label = document.getElementById('progress-label')
+    label.textContent = `${done} / ${total}`
+    label.className = done === total ? 'progress-text done' : 'progress-text'
+
+    document.getElementById('count-text').innerHTML =
+      `<span>${done}</span> / ${total} 완료`
+
+    const btn = document.getElementById('submit-btn')
+    btn.disabled = done < total
+  }
+
+  // ── 마커 배치 시작 ───────────────────────────────────────────────────────────
+  function startPlacing(index) {
+    if (placingFor === index) {
+      // 토글: 취소
+      placingFor = null
+    } else {
+      placingFor = index
+    }
+    updatePlacingUI()
+  }
+
+  function updatePlacingUI() {
+    const canvas = document.getElementById('ann-canvas')
+    const hint = document.getElementById('placing-hint')
+
+    violations.forEach((_, i) => {
+      const pinBtn = document.getElementById(`vi-pin-${i}`)
+      const card = document.getElementById(`vi-${i}`)
+
+      if (i === placingFor) {
+        pinBtn.className = 'vi-pin-btn placing'
+        pinBtn.textContent = '🎯 클릭으로 위치 선택'
+        card.classList.add('placing-active')
+      } else {
+        const pinned = states[i].markerX !== null
+        pinBtn.className = `vi-pin-btn${pinned ? ' pinned' : ''}`
+        pinBtn.textContent = pinned ? '✓ 위치표시' : '📍 위치'
+        card.classList.remove('placing-active')
+      }
+    })
+
+    if (canvas) canvas.className = placingFor !== null ? 'placing' : ''
+    if (hint) hint.style.display = placingFor !== null ? 'block' : 'none'
+  }
+
+  // ── 캔버스 초기화 ────────────────────────────────────────────────────────────
+  function setupCanvas() {
+    const img = document.getElementById('screenshot-img')
+    const canvas = document.getElementById('ann-canvas')
+    if (!img || !canvas) return
+
+    function sync() {
+      const rect = img.getBoundingClientRect()
+      canvas.width = rect.width
+      canvas.height = rect.height
+      drawMarkers()
+    }
+
+    if (img.complete) sync()
+    else img.addEventListener('load', sync)
+
+    window.addEventListener('resize', sync)
+
+    canvas.addEventListener('click', (e) => {
+      if (placingFor === null) return
+      const rect = canvas.getBoundingClientRect()
+      const x = (e.clientX - rect.left) / rect.width
+      const y = (e.clientY - rect.top) / rect.height
+      states[placingFor].markerX = x
+      states[placingFor].markerY = y
+      placingFor = null
+      updatePlacingUI()
+      drawMarkers()
+    })
+  }
+
+  // ── 마커 그리기 ─────────────────────────────────────────────────────────────
+  function drawMarkers() {
+    const canvas = document.getElementById('ann-canvas')
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    const STATUS_COLOR = { approved: '#10b981', conditional: '#f59e0b', rejected: '#ef4444' }
+
+    states.forEach((s, i) => {
+      if (s.markerX === null) return
+      const x = s.markerX * canvas.width
+      const y = s.markerY * canvas.height
+      const color = STATUS_COLOR[s.status] ?? '#3b82f6'
+      const r = 14
+
+      // 그림자
+      ctx.shadowColor = 'rgba(0,0,0,0.3)'
+      ctx.shadowBlur = 6
+      ctx.shadowOffsetY = 2
+
+      // 원
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, 2 * Math.PI)
+      ctx.fillStyle = color
+      ctx.fill()
+
+      ctx.shadowColor = 'transparent'
+      ctx.shadowBlur = 0
+      ctx.shadowOffsetY = 0
+
+      // 숫자
+      ctx.fillStyle = '#fff'
+      ctx.font = `bold 11px -apple-system, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(i + 1), x, y)
+    })
+  }
+
+  // ── 제출 ────────────────────────────────────────────────────────────────────
+  async function handleSubmit() {
+    const btn = document.getElementById('submit-btn')
+    btn.textContent = '전송 중...'
+    btn.disabled = true
+
+    try {
+      const res = await fetch(`${EDGE_URL}/review-submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          review_id: reviewId,
+          reviewer_name: '조지혜',
+          violation_reviews: states.map((s, i) => ({
+            violation_index: i,
+            violation_id: violations[i]?.id ?? String(i),
+            status: s.status,
+            comment: s.comment || null,
+            marker_x: s.markerX,
+            marker_y: s.markerY,
+          })),
+        }),
+      })
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+
+      showDone()
+    } catch (err) {
+      btn.textContent = '검토 결과 보내기'
+      btn.disabled = false
+      alert('전송에 실패했습니다. 다시 시도해주세요.')
+    }
+  }
+
+  // ── 완료 화면 ────────────────────────────────────────────────────────────────
+  function showDone() {
+    document.getElementById('app').innerHTML = `
+      <div class="center-screen">
+        <div class="icon">✅</div>
+        <div class="title">검토 완료!</div>
+        <div class="desc">결과가 슬랙으로 전달됐어요</div>
+      </div>
+    `
+  }
+
+  function showError(title, desc) {
+    document.getElementById('app').innerHTML = `
+      <div class="center-screen">
+        <div class="icon">⚠️</div>
+        <div class="title">${esc(title)}</div>
+        <div class="desc">${esc(desc)}</div>
+      </div>
+    `
+  }
+
+  function esc(str) {
+    if (!str) return ''
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+
+  init()
+</script>
+</body>
+</html>
