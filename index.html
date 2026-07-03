@@ -16,7 +16,6 @@
       color: #111;
     }
 
-    /* ── 전체 레이아웃 ── */
     #app { height: 100dvh; display: flex; align-items: center; justify-content: center; }
 
     .review-layout {
@@ -41,7 +40,7 @@
     .top-bar-sub { font-size: 12px; color: #6b7280; }
     .top-bar-dot { width: 3px; height: 3px; border-radius: 50%; background: #d1d5db; }
 
-    /* ── 왼쪽: 스크린샷 + 캔버스 ── */
+    /* ── 왼쪽: 스크린샷 ── */
     .screenshot-pane {
       background: #1c1c1e;
       display: flex;
@@ -49,22 +48,25 @@
       justify-content: center;
       overflow: hidden;
       position: relative;
+      user-select: none;
     }
 
     .screenshot-wrap {
       position: relative;
       line-height: 0;
-      max-width: 90%;
-      max-height: 90%;
+      transform-origin: center center;
+      will-change: transform;
+      flex-shrink: 0;
     }
 
     #screenshot-img {
       display: block;
-      max-width: 100%;
-      max-height: 85dvh;
-      object-fit: contain;
+      max-width: calc(100vw - 400px);
+      max-height: calc(100dvh - 48px);
+      width: auto;
+      height: auto;
       border-radius: 4px;
-      box-shadow: 0 4px 32px rgba(0,0,0,0.5);
+      box-shadow: 0 4px 40px rgba(0,0,0,0.6);
     }
 
     #ann-canvas {
@@ -73,12 +75,11 @@
       cursor: default;
       border-radius: 4px;
     }
-
     #ann-canvas.placing { cursor: crosshair; }
 
     .placing-hint {
       position: absolute;
-      bottom: 12px;
+      bottom: 56px;
       left: 50%;
       transform: translateX(-50%);
       background: rgba(59,130,246,0.9);
@@ -89,12 +90,68 @@
       border-radius: 20px;
       white-space: nowrap;
       pointer-events: none;
+      z-index: 20;
     }
 
     .no-screenshot {
       color: #6b7280;
       font-size: 13px;
       text-align: center;
+    }
+
+    /* ── 줌 컨트롤 ── */
+    .zoom-controls {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(10px);
+      border-radius: 10px;
+      padding: 4px 6px;
+      z-index: 20;
+      pointer-events: auto;
+    }
+    .zoom-btn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 18px;
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: inherit;
+      font-weight: 400;
+      transition: background 0.1s;
+      line-height: 1;
+    }
+    .zoom-btn:hover { background: rgba(255,255,255,0.15); }
+    .zoom-label {
+      color: rgba(255,255,255,0.85);
+      font-size: 12px;
+      font-weight: 500;
+      min-width: 44px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .zoom-divider {
+      width: 1px;
+      height: 18px;
+      background: rgba(255,255,255,0.2);
+      margin: 0 4px;
+    }
+    .zoom-fit-btn {
+      font-size: 11px;
+      width: auto;
+      padding: 0 10px;
+      height: 32px;
     }
 
     /* ── 오른쪽: 검토 패널 ── */
@@ -105,18 +162,13 @@
       flex-direction: column;
       overflow: hidden;
     }
-
     .review-pane-header {
       padding: 14px 16px 12px;
       border-bottom: 1px solid #f0f0f0;
       flex-shrink: 0;
     }
     .review-pane-header h3 { font-size: 13px; font-weight: 600; color: #374151; }
-    .review-pane-header .count {
-      font-size: 11px;
-      color: #9ca3af;
-      margin-top: 2px;
-    }
+    .review-pane-header .count { font-size: 11px; color: #9ca3af; margin-top: 2px; }
     .review-pane-header .count span { color: #3b82f6; font-weight: 600; }
 
     .violations-list {
@@ -146,7 +198,6 @@
       gap: 10px;
       padding: 10px 12px;
       background: #f9fafb;
-      cursor: default;
     }
     .vi-card.done-approved .vi-header { background: #f0fdf4; }
     .vi-card.done-conditional .vi-header { background: #fffbeb; }
@@ -191,7 +242,6 @@
       gap: 6px;
       margin-bottom: 8px;
     }
-
     .vi-btn {
       flex: 1;
       padding: 7px 4px;
@@ -231,7 +281,6 @@
       border-top: 1px solid #f0f0f0;
       flex-shrink: 0;
     }
-
     .submit-progress {
       display: flex;
       align-items: center;
@@ -295,7 +344,6 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── 스크롤바 ── */
     .violations-list::-webkit-scrollbar { width: 4px; }
     .violations-list::-webkit-scrollbar-track { background: transparent; }
     .violations-list::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
@@ -320,12 +368,111 @@
   const params = new URLSearchParams(window.location.search)
   const reviewId = params.get('review_id')
 
-  // ── 상태 ────────────────────────────────────────────────────────────────────
   let review = null
   let violations = []
-  // states[i] = { status: null|'approved'|'conditional'|'rejected', comment: '', markerX: null, markerY: null }
   let states = []
-  let placingFor = null  // 마커 배치 중인 항목 인덱스
+  let placingFor = null
+
+  // ── 줌/패닝 상태 ──────────────────────────────────────────────────────────────
+  let zoom = 1
+  let panX = 0, panY = 0
+  let isDragging = false
+  let didDrag = false
+  let dragStartX = 0, dragStartY = 0
+  let panStartX = 0, panStartY = 0
+  let lastPinchDist = null
+
+  function applyTransform(transition) {
+    const wrap = document.getElementById('ss-wrap')
+    if (!wrap) return
+    wrap.style.transition = transition ? 'transform 0.2s ease' : 'none'
+    wrap.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`
+    const label = document.getElementById('zoom-label')
+    if (label) label.textContent = Math.round(zoom * 100) + '%'
+    const pane = document.getElementById('ss-pane')
+    if (pane) pane.style.cursor = isDragging ? 'grabbing' : (zoom > 1 ? 'grab' : 'default')
+  }
+
+  function zoomBy(factor, animated) {
+    zoom = Math.max(0.5, Math.min(8, zoom * factor))
+    applyTransform(animated)
+  }
+
+  function zoomFit() {
+    zoom = 1; panX = 0; panY = 0
+    applyTransform(true)
+  }
+
+  function setupZoom() {
+    const pane = document.getElementById('ss-pane')
+    if (!pane) return
+
+    // 마우스 휠
+    pane.addEventListener('wheel', (e) => {
+      e.preventDefault()
+      const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12
+      zoom = Math.max(0.5, Math.min(8, zoom * factor))
+      applyTransform(false)
+    }, { passive: false })
+
+    // 드래그 패닝
+    pane.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return
+      isDragging = true
+      didDrag = false
+      dragStartX = e.clientX
+      dragStartY = e.clientY
+      panStartX = panX
+      panStartY = panY
+      applyTransform(false)
+    })
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return
+      const dx = e.clientX - dragStartX
+      const dy = e.clientY - dragStartY
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true
+      panX = panStartX + dx
+      panY = panStartY + dy
+      applyTransform(false)
+    })
+
+    window.addEventListener('mouseup', () => {
+      isDragging = false
+      applyTransform(false)
+      setTimeout(() => { didDrag = false }, 0)
+    })
+
+    // 더블클릭: 100% ↔ 맞춤 토글
+    pane.addEventListener('dblclick', () => {
+      if (zoom !== 1) { zoomFit() } else { zoom = 2; applyTransform(true) }
+    })
+
+    // 터치 핀치 줌
+    pane.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        lastPinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        )
+      }
+    }, { passive: true })
+
+    pane.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault()
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        )
+        if (lastPinchDist) zoom = Math.max(0.5, Math.min(8, zoom * (dist / lastPinchDist)))
+        lastPinchDist = dist
+        applyTransform(false)
+      }
+    }, { passive: false })
+
+    pane.addEventListener('touchend', () => { lastPinchDist = null })
+  }
 
   // ── 초기화 ──────────────────────────────────────────────────────────────────
   async function init() {
@@ -341,7 +488,7 @@
     buildLayout()
   }
 
-  // ── 전체 레이아웃 빌드 (1회) ─────────────────────────────────────────────────
+  // ── 전체 레이아웃 빌드 ───────────────────────────────────────────────────────
   function buildLayout() {
     const app = document.getElementById('app')
     app.innerHTML = `
@@ -358,11 +505,18 @@
         <div class="screenshot-pane" id="ss-pane">
           ${review.preview_image_url
             ? `<div class="screenshot-wrap" id="ss-wrap">
-                <img id="screenshot-img" src="${esc(review.preview_image_url)}" alt="화면 스크린샷" />
+                <img id="screenshot-img" src="${esc(review.preview_image_url)}" alt="화면 스크린샷" draggable="false" />
                 <canvas id="ann-canvas"></canvas>
                </div>
                <div class="placing-hint" id="placing-hint" style="display:none">
                  스크린샷에서 위치를 클릭해주세요
+               </div>
+               <div class="zoom-controls">
+                 <button class="zoom-btn" onclick="zoomBy(1/1.3, true)" title="축소">−</button>
+                 <span class="zoom-label" id="zoom-label">100%</span>
+                 <button class="zoom-btn" onclick="zoomBy(1.3, true)" title="확대">+</button>
+                 <div class="zoom-divider"></div>
+                 <button class="zoom-btn zoom-fit-btn" onclick="zoomFit()">맞춤</button>
                </div>`
             : `<div class="no-screenshot">스크린샷이 없습니다</div>`
           }
@@ -391,10 +545,13 @@
     `
 
     buildViolationCards()
-    if (review.preview_image_url) setupCanvas()
+    if (review.preview_image_url) {
+      setupCanvas()
+      setupZoom()
+    }
   }
 
-  // ── 위반 항목 카드 빌드 (1회) ────────────────────────────────────────────────
+  // ── 위반 항목 카드 빌드 ──────────────────────────────────────────────────────
   function buildViolationCards() {
     const list = document.getElementById('vi-list')
     violations.forEach((v, i) => {
@@ -423,7 +580,7 @@
     })
   }
 
-  // ── 상태 업데이트 (카드 UI 갱신) ────────────────────────────────────────────
+  // ── 상태 업데이트 ────────────────────────────────────────────────────────────
   function setStatus(index, status) {
     states[index].status = status
 
@@ -435,10 +592,8 @@
       btn.className = `vi-btn${status === s ? ` sel-${s}` : ''}`
     })
 
-    const cmt = document.getElementById(`vi-cmt-${index}`)
-    cmt.placeholder = status === 'approved'
-      ? '코멘트 (선택)'
-      : '수정이 필요한 내용을 입력해주세요'
+    document.getElementById(`vi-cmt-${index}`).placeholder =
+      status === 'approved' ? '코멘트 (선택)' : '수정이 필요한 내용을 입력해주세요'
 
     drawMarkers()
     updateProgress()
@@ -456,21 +611,13 @@
     label.textContent = `${done} / ${total}`
     label.className = done === total ? 'progress-text done' : 'progress-text'
 
-    document.getElementById('count-text').innerHTML =
-      `<span>${done}</span> / ${total} 완료`
-
-    const btn = document.getElementById('submit-btn')
-    btn.disabled = done < total
+    document.getElementById('count-text').innerHTML = `<span>${done}</span> / ${total} 완료`
+    document.getElementById('submit-btn').disabled = done < total
   }
 
-  // ── 마커 배치 시작 ───────────────────────────────────────────────────────────
+  // ── 마커 배치 ────────────────────────────────────────────────────────────────
   function startPlacing(index) {
-    if (placingFor === index) {
-      // 토글: 취소
-      placingFor = null
-    } else {
-      placingFor = index
-    }
+    placingFor = placingFor === index ? null : index
     updatePlacingUI()
   }
 
@@ -505,22 +652,26 @@
     if (!img || !canvas) return
 
     function sync() {
-      const rect = img.getBoundingClientRect()
-      canvas.width = rect.width
-      canvas.height = rect.height
+      // offsetWidth/Height는 transform 영향 없이 레이아웃 크기 반환
+      canvas.width = img.offsetWidth
+      canvas.height = img.offsetHeight
       drawMarkers()
     }
 
-    if (img.complete) sync()
+    if (img.complete && img.naturalWidth) sync()
     else img.addEventListener('load', sync)
 
     window.addEventListener('resize', sync)
 
     canvas.addEventListener('click', (e) => {
-      if (placingFor === null) return
+      if (placingFor === null || didDrag) return
       const rect = canvas.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / rect.width
-      const y = (e.clientY - rect.top) / rect.height
+      // getBoundingClientRect는 줌 transform이 적용된 시각적 크기 반환
+      // 마커 좌표는 canvas 논리 크기 기준으로 정규화
+      const scaleX = canvas.width / rect.width
+      const scaleY = canvas.height / rect.height
+      const x = ((e.clientX - rect.left) * scaleX) / canvas.width
+      const y = ((e.clientY - rect.top) * scaleY) / canvas.height
       states[placingFor].markerX = x
       states[placingFor].markerY = y
       placingFor = null
@@ -545,12 +696,9 @@
       const color = STATUS_COLOR[s.status] ?? '#3b82f6'
       const r = 14
 
-      // 그림자
       ctx.shadowColor = 'rgba(0,0,0,0.3)'
       ctx.shadowBlur = 6
       ctx.shadowOffsetY = 2
-
-      // 원
       ctx.beginPath()
       ctx.arc(x, y, r, 0, 2 * Math.PI)
       ctx.fillStyle = color
@@ -559,8 +707,6 @@
       ctx.shadowColor = 'transparent'
       ctx.shadowBlur = 0
       ctx.shadowOffsetY = 0
-
-      // 숫자
       ctx.fillStyle = '#fff'
       ctx.font = `bold 11px -apple-system, sans-serif`
       ctx.textAlign = 'center'
@@ -594,7 +740,6 @@
       })
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-
       showDone()
     } catch (err) {
       btn.textContent = '검토 결과 보내기'
@@ -603,7 +748,7 @@
     }
   }
 
-  // ── 완료 화면 ────────────────────────────────────────────────────────────────
+  // ── 완료 / 에러 화면 ─────────────────────────────────────────────────────────
   function showDone() {
     document.getElementById('app').innerHTML = `
       <div class="center-screen">
