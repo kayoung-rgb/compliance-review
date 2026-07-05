@@ -559,7 +559,13 @@
     review = data
     violations = Array.isArray(data.violations) ? [...data.violations] : []
     origCount = violations.length
-    states = violations.map(() => ({ status: null, comment: '', markerX: null, markerY: null }))
+    // DB에 저장된 위치 좌표가 있으면 사용, 없으면 null (이미지 로드 후 자동 분배)
+    states = violations.map(v => ({
+      status: null,
+      comment: '',
+      markerX: (typeof v.markerX === 'number') ? v.markerX : null,
+      markerY: (typeof v.markerY === 'number') ? v.markerY : null,
+    }))
 
     buildLayout()
   }
