@@ -667,6 +667,7 @@
         <textarea class="vi-comment" id="vi-cmt-${i}"
           placeholder="${isCustom ? '추가 검토 내용을 입력해주세요' : '코멘트를 입력해주세요 (선택)'}"
           oninput="states[${i}].comment = this.value; autoResize(this)"
+          onfocus="this.closest('.vi-card').scrollIntoView({ behavior: 'smooth', block: 'start' })"
         ></textarea>
       </div>
     `
@@ -685,6 +686,9 @@
   function autoResize(el) {
     el.style.height = 'auto'
     el.style.height = el.scrollHeight + 'px'
+    // 카드 헤더가 스크롤 밖으로 밀려나지 않도록
+    const card = el.closest('.vi-card')
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 
   // ── 상태 업데이트 ────────────────────────────────────────────────────────────
