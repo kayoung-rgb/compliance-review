@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>컴플 검토</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Pretendard', sans-serif;
+      background: #f5f6f7;
+      height: 100dvh;
+      overflow: hidden;
+      color: #111;
+    }
+
+    #app { height: 100dvh; display: flex; align-items: center; justify-content: center; }
+
+    .review-layout {
+      display: grid;
+      grid-template-columns: 2fr 3fr;
+      grid-template-rows: 48px 1fr;
+      width: 100%;
+      height: 100dvh;
+    }
+
+    /* ── 상단 헤더 ── */
+    .top-bar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .top-bar-title { font-size: 14px; font-weight: 600; color: #111; }
+    .top-bar-sub { font-size: 12px; color: #6b7280; }
+    .top-bar-dot { width: 3px; height: 3px; border-radius: 50%; background: #d1d5db; }
+
+    /* ── 왼쪽: 스크린샷 ── */
+    .screenshot-pane {
+      background: #1c1c1e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      user-select: none;
+    }
+
+    .screenshot-wrap {
+      position: relative;
+      line-height: 0;
+      transform-origin: center center;
+      will-change: transform;
+      flex-shrink: 0;
+    }
+
+    #screenshot-img {
+      display: block;
+      width: auto;
+      height: auto;
+      border-radius: 4px;
+      box-shadow: 0 4px 40px rgba(0,0,0,0.6);
+    }
+
+    #ann-canvas {
+      position: absolute;
+      inset: 0;
+      cursor: default;
+      border-radius: 4px;
+    }
+    #ann-canvas.placing { cursor: crosshair; }
+
+    .placing-hint {
+      position: absolute;
+      bottom: 56px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(59,130,246,0.9);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 20px;
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .no-screenshot { color: #6b7280; font-size: 13px; }
+
+    /* ── 추가 어노테이션 버튼 ── */
+    .add-ann-btn {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.2);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      z-index: 20;
+      font-family: inherit;
+      transition: background 0.1s, border-color 0.1s;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .add-ann-btn:hover { background: rgba(30,30,30,0.9); }
+    .add-ann-btn.active {
+      background: rgba(59,130,246,0.9);
+      border-color: rgba(255,255,255,0.3);
+    }
+
+    /* ── 줌 컨트롤 ── */
+    .zoom-controls {
+      position: absolute;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(10px);
+      border-radius: 10px;
+      padding: 4px 6px;
+      z-index: 20;
+    }
+    .zoom-btn {
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 18px;
+      width: 32px;
+      height: 32px;
+      cursor: pointer;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: inherit;
+      transition: background 0.1s;
+      line-height: 1;
+    }
+    .zoom-btn:hover { background: rgba(255,255,255,0.15); }
+    .zoom-label {
+      color: rgba(255,255,255,0.85);
+      font-size: 12px;
+      font-weight: 500;
+      min-width: 44px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    .zoom-divider { width: 1px; height: 18px; background: rgba(255,255,255,0.2); margin: 0 4px; }
+    .zoom-fit-btn { font-size: 11px; width: auto; padding: 0 10px; height: 32px; }
+
+    /* ── 오른쪽: 검토 패널 ── */
+    .review-pane {
+      background: #fff;
+      border-left: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .review-pane-header {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid #f0f0f0;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .review-pane-header h3 { font-size: 13px; font-weight: 600; color: #374151; }
+    .review-pane-header .count { font-size: 11px; color: #9ca3af; margin-top: 2px; }
+    .review-pane-header .count span { color: #3b82f6; font-weight: 600; }
+
+    .violations-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* ── 위반 항목 카드 ── */
+    .vi-card {
+      border: 1.5px solid #e5e7eb;
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .vi-card.custom { border-style: dashed; }
+    .vi-card.placing-active { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
+    .vi-card.done-approved { border-color: #10b981; border-style: solid; }
+    .vi-card.done-conditional { border-color: #f59e0b; border-style: solid; }
+    .vi-card.done-rejected { border-color: #ef4444; border-style: solid; }
+
+    .vi-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+      background: #f9fafb;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .vi-header:hover { background: #f1f3f5; }
+    .vi-card.done-approved .vi-header { background: #f0fdf4; }
+    .vi-card.done-approved .vi-header:hover { background: #dcfce7; }
+    .vi-card.done-conditional .vi-header { background: #fffbeb; }
+    .vi-card.done-conditional .vi-header:hover { background: #fef3c7; }
+    .vi-card.done-rejected .vi-header { background: #fef2f2; }
+    .vi-card.done-rejected .vi-header:hover { background: #fee2e2; }
+
+    .vi-num {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #6b7280;
+      color: #fff;
+      font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s;
+    }
+    .vi-card.done-approved .vi-num { background: #10b981; }
+    .vi-card.done-conditional .vi-num { background: #f59e0b; }
+    .vi-card.done-rejected .vi-num { background: #ef4444; }
+
+    .vi-title { font-size: 12px; font-weight: 500; flex: 1; line-height: 1.4; }
+    .vi-anchor-hint { font-size: 10px; color: #9ca3af; flex-shrink: 0; }
+    .vi-header:hover .vi-anchor-hint { color: #3b82f6; }
+
+    .vi-pin-btn {
+      flex-shrink: 0;
+      font-size: 11px;
+      color: #9ca3af;
+      background: none;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 2px 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.1s;
+    }
+    .vi-pin-btn:hover { border-color: #3b82f6; color: #3b82f6; }
+    .vi-pin-btn.pinned { border-color: #10b981; color: #10b981; }
+    .vi-pin-btn.placing { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
+
+    .vi-body { padding: 10px 14px 14px; }
+
+    .vi-buttons {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .vi-btn {
+      flex: 1;
+      padding: 8px 4px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      background: #fff;
+      color: #374151;
+      transition: all 0.12s;
+    }
+    .vi-btn:hover { opacity: 0.75; }
+    .vi-btn.sel-approved { background: #ecfdf5; border-color: #10b981; color: #059669; font-weight: 600; }
+    .vi-btn.sel-conditional { background: #fffbeb; border-color: #f59e0b; color: #d97706; font-weight: 600; }
+    .vi-btn.sel-rejected { background: #fef2f2; border-color: #ef4444; color: #dc2626; font-weight: 600; }
+
+    .vi-comment {
+      width: 100%;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.6;
+      resize: none;
+      overflow: hidden;
+      outline: none;
+      font-family: inherit;
+      color: #374151;
+      transition: border-color 0.12s;
+      background: #fafafa;
+      min-height: 124px;
+      height: 124px;
+    }
+    .vi-comment:focus { border-color: #3b82f6; background: #fff; }
+
+    /* ── 하단 제출 영역 ── */
+    .review-footer {
+      padding: 12px 16px;
+      border-top: 1px solid #f0f0f0;
+      flex-shrink: 0;
+    }
+    .submit-progress { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+    .progress-bar-bg { flex: 1; height: 4px; background: #f3f4f6; border-radius: 2px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; background: #3b82f6; border-radius: 2px; transition: width 0.3s; }
+    .progress-text { font-size: 11px; color: #9ca3af; white-space: nowrap; }
+    .progress-text.done { color: #10b981; font-weight: 600; }
+
+    .submit-btn {
+      width: 100%;
+      padding: 12px;
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, opacity 0.15s;
+      font-family: inherit;
+    }
+    .submit-btn:hover:not(:disabled) { background: #2563eb; }
+    .submit-btn:disabled { background: #bfdbfe; cursor: not-allowed; }
+
+    /* ── 로딩 / 에러 / 완료 ── */
+    .center-screen {
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 12px; padding: 40px; text-align: center;
+    }
+    .center-screen .icon { font-size: 48px; }
+    .center-screen .title { font-size: 18px; font-weight: 600; }
+    .center-screen .desc { font-size: 13px; color: #6b7280; }
+
+    .spinner {
+      width: 32px; height: 32px;
+      border: 3px solid #e5e7eb;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .violations-list::-webkit-scrollbar { width: 4px; }
+    .violations-list::-webkit-scrollbar-track { background: transparent; }
+    .violations-list::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 2px; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="center-screen">
+    <div class="spinner"></div>
+    <div class="desc">검토 데이터를 불러오는 중...</div>
+  </div>
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://irulwjmxnjtvlvyvjkax.supabase.co'
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlydWx3am14bmp0dmx2eXZqa2F4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5NzAzODMsImV4cCI6MjA5NTU0NjM4M30.2z7l0knclzmvGQNVa830G6vz_JRgwYBs_nR-4SdEeFs'
+  const EDGE_URL = 'https://irulwjmxnjtvlvyvjkax.supabase.co/functions/v1'
+
+  const { createClient } = supabase
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+  const params = new URLSearchParams(window.location.search)
+  const reviewId = params.get('review_id')
+
+  let review = null
+  let violations = []   // 원본 + 추가 어노테이션 합친 배열
+  let origCount = 0     // DB에서 온 원본 항목 수
+  let customCount = 0   // 사용자가 추가한 항목 수
+  let states = []
+  let placingFor = null
+  let addingAnnotation = false
+  let imgNaturalW = 0, imgNaturalH = 0
+
+  // ── 줌/패닝 상태 ─────────────────────────────────────────────────────────────
+  let fitZoom = 1
+  let zoom = 1
+  let panX = 0, panY = 0
+  let isDragging = false
+  let didDrag = false
+  let dragStartX = 0, dragStartY = 0
+  let panStartX = 0, panStartY = 0
+  let lastPinchDist = null
+
+  function applyTransform(animated) {
+    const wrap = document.getElementById('ss-wrap')
+    if (!wrap) return
+    wrap.style.transition = animated ? 'transform 0.25s ease' : 'none'
+    wrap.style.transform = `translate(${panX}px, ${panY}px) scale(${zoom})`
+    const label = document.getElementById('zoom-label')
+    if (label) label.textContent = Math.round(zoom * 100) + '%'
+    const pane = document.getElementById('ss-pane')
+    if (pane) pane.style.cursor = isDragging ? 'grabbing' : (zoom > fitZoom * 1.05 ? 'grab' : 'default')
+  }
+
+  function calcFitZoom() {
+    const pane = document.getElementById('ss-pane')
+    if (!pane || !imgNaturalW) return 1
+    return pane.offsetWidth / imgNaturalW
+  }
+
+  function zoomBy(factor, animated) {
+    zoom = Math.max(0.1, Math.min(8, zoom * factor))
+    applyTransform(animated)
+  }
+
+  function zoomFit() {
+    zoom = fitZoom; panX = 0; panY = 0
+    applyTransform(true)
+  }
+
+  // 특정 마커 위치로 스크린샷 이동
+  function panToMarker(index) {
+    const s = states[index]
+    if (!s || s.markerX === null) {
+      // 마커 없으면 위치 지정 모드 시작
+      startPlacing(index)
+      return
+    }
+    panX = -(s.markerX - 0.5) * imgNaturalW * zoom
+    panY = -(s.markerY - 0.5) * imgNaturalH * zoom
+    applyTransform(true)
+
+    // 마커 펄스 효과
+    pulseMarker(index)
+  }
+
+  function pulseMarker(index) {
+    const canvas = document.getElementById('ann-canvas')
+    if (!canvas || !states[index] || states[index].markerX === null) return
+    let frame = 0
+    const s = states[index]
+    const STATUS_COLOR = { approved: '#10b981', conditional: '#f59e0b', rejected: '#ef4444' }
+    const color = STATUS_COLOR[s.status] ?? '#3b82f6'
+
+    function draw() {
+      const ctx = canvas.getContext('2d')
+      drawMarkers()
+      const x = s.markerX * canvas.width
+      const y = s.markerY * canvas.height
+      const r = 14 + (frame / 8) * 18
+      const alpha = 1 - frame / 8
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, 2 * Math.PI)
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      ctx.globalAlpha = alpha
+      ctx.stroke()
+      ctx.globalAlpha = 1
+      frame++
+      if (frame < 8) requestAnimationFrame(draw)
+    }
+    requestAnimationFrame(draw)
+  }
+
+  function setupZoom() {
+    const pane = document.getElementById('ss-pane')
+    if (!pane) return
+
+    pane.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return
+      isDragging = true
+      didDrag = false
+      dragStartX = e.clientX
+      dragStartY = e.clientY
+      panStartX = panX
+      panStartY = panY
+      applyTransform(false)
+    })
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return
+      const dx = e.clientX - dragStartX
+      const dy = e.clientY - dragStartY
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag = true
+      panX = panStartX + dx
+      panY = panStartY + dy
+      applyTransform(false)
+    })
+
+    window.addEventListener('mouseup', () => {
+      isDragging = false
+      applyTransform(false)
+      setTimeout(() => { didDrag = false }, 0)
+    })
+
+    pane.addEventListener('dblclick', () => {
+      if (zoom > fitZoom * 1.05) zoomFit()
+      else { zoom = fitZoom * 2; applyTransform(true) }
+    })
+
+    // 터치 핀치 줌
+    pane.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 2) {
+        lastPinchDist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        )
+      }
+    }, { passive: true })
+
+    pane.addEventListener('touchmove', (e) => {
+      if (e.touches.length === 2) {
+        e.preventDefault()
+        const dist = Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY
+        )
+        if (lastPinchDist) zoom = Math.max(0.1, Math.min(8, zoom * (dist / lastPinchDist)))
+        lastPinchDist = dist
+        applyTransform(false)
+      }
+    }, { passive: false })
+
+    pane.addEventListener('touchend', () => { lastPinchDist = null })
+  }
+
+  // ── 추가 어노테이션 모드 ──────────────────────────────────────────────────────
+  function toggleAddAnnotation() {
+    addingAnnotation = !addingAnnotation
+    placingFor = null
+    updatePlacingUI()
+    const btn = document.getElementById('add-ann-btn')
+    if (btn) btn.className = addingAnnotation ? 'add-ann-btn active' : 'add-ann-btn'
+    const canvas = document.getElementById('ann-canvas')
+    if (canvas) canvas.className = addingAnnotation ? 'placing' : ''
+    const hint = document.getElementById('placing-hint')
+    if (hint) hint.style.display = addingAnnotation ? 'block' : 'none'
+    if (hint && addingAnnotation) hint.textContent = '추가할 위치를 클릭해주세요'
+  }
+
+  function addCustomAnnotation(nx, ny) {
+    customCount++
+    const newIndex = violations.length
+    violations.push({ title: `추가 검토 ${customCount}`, severity: 'low', isCustom: true })
+    states.push({ status: null, comment: '', markerX: nx, markerY: ny })
+
+    const list = document.getElementById('vi-list')
+    if (list) appendViolationCard(newIndex, list)
+
+    drawMarkers()
+    updateProgress()
+
+    // 새 카드로 스크롤
+    const newCard = document.getElementById(`vi-${newIndex}`)
+    if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+
+  // ── 초기화 ──────────────────────────────────────────────────────────────────
+  async function init() {
+    if (!reviewId) return showError('리뷰 ID가 없습니다.', '슬랙 메시지의 검토하기 버튼을 다시 클릭해주세요.')
+
+    const { data, error } = await sb.from('compliance_reviews').select('*').eq('id', reviewId).single()
+    if (error || !data) return showError('검토 데이터를 찾을 수 없습니다.', '이미 삭제되었거나 잘못된 링크예요.')
+
+    review = data
+    violations = Array.isArray(data.violations) ? [...data.violations] : []
+    origCount = violations.length
+    states = violations.map(() => ({ status: null, comment: '', markerX: null, markerY: null }))
+
+    buildLayout()
+  }
+
+  // ── 전체 레이아웃 빌드 ───────────────────────────────────────────────────────
+  function buildLayout() {
+    const app = document.getElementById('app')
+    app.innerHTML = `
+      <div class="review-layout">
+
+        <div class="top-bar">
+          <span class="top-bar-title">${esc(review.frame_name ?? '컴플 검토')}</span>
+          <div class="top-bar-dot"></div>
+          <span class="top-bar-sub">${esc(review.service_name ?? '')}</span>
+          <div class="top-bar-dot"></div>
+          <span class="top-bar-sub">검토가 필요한 부분 ${origCount}건</span>
+        </div>
+
+        <div class="screenshot-pane" id="ss-pane">
+          ${review.preview_image_url
+            ? `<div class="screenshot-wrap" id="ss-wrap">
+                <img id="screenshot-img" src="${esc(review.preview_image_url)}" alt="화면 스크린샷" draggable="false" />
+                <canvas id="ann-canvas"></canvas>
+               </div>
+               <div class="placing-hint" id="placing-hint" style="display:none">
+                 스크린샷에서 위치를 클릭해주세요
+               </div>
+               <button class="add-ann-btn" id="add-ann-btn" onclick="toggleAddAnnotation()">
+                 📌 추가
+               </button>
+               <div class="zoom-controls">
+                 <button class="zoom-btn" onclick="zoomBy(1/1.3, true)">−</button>
+                 <span class="zoom-label" id="zoom-label">100%</span>
+                 <button class="zoom-btn" onclick="zoomBy(1.3, true)">+</button>
+                 <div class="zoom-divider"></div>
+                 <button class="zoom-btn zoom-fit-btn" onclick="zoomFit()">맞춤</button>
+               </div>`
+            : `<div class="no-screenshot">스크린샷이 없습니다</div>`
+          }
+        </div>
+
+        <div class="review-pane">
+          <div class="review-pane-header">
+            <div>
+              <h3>항목별 검토</h3>
+              <div class="count" id="count-text">0 / ${violations.length} 완료</div>
+            </div>
+          </div>
+          <div class="violations-list" id="vi-list"></div>
+          <div class="review-footer">
+            <div class="submit-progress">
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+              </div>
+              <span class="progress-text" id="progress-label">0 / ${violations.length}</span>
+            </div>
+            <button class="submit-btn" id="submit-btn" disabled onclick="handleSubmit()">
+              검토 결과 보내기
+            </button>
+          </div>
+        </div>
+
+      </div>
+    `
+
+    const list = document.getElementById('vi-list')
+    violations.forEach((_, i) => appendViolationCard(i, list))
+
+    if (review.preview_image_url) {
+      setupCanvas()
+      setupZoom()
+    }
+  }
+
+  // ── 카드 하나 추가 ───────────────────────────────────────────────────────────
+  function appendViolationCard(i, list) {
+    if (!list) list = document.getElementById('vi-list')
+    const v = violations[i]
+    const isCustom = !!v.isCustom
+
+    const card = document.createElement('div')
+    card.className = `vi-card${isCustom ? ' custom' : ''}`
+    card.id = `vi-${i}`
+    card.innerHTML = `
+      <div class="vi-header" onclick="panToMarker(${i})">
+        <div class="vi-num" id="vi-num-${i}">${i + 1}</div>
+        <div class="vi-title">${esc(v.title ?? `항목 ${i+1}`)}</div>
+        <span class="vi-anchor-hint" id="vi-anchor-${i}">↖ 위치로</span>
+        <button class="vi-pin-btn" id="vi-pin-${i}" onclick="event.stopPropagation(); startPlacing(${i})">📍 위치</button>
+      </div>
+      <div class="vi-body">
+        <div class="vi-buttons">
+          <button class="vi-btn" id="vi-btn-${i}-approved"  onclick="setStatus(${i},'approved')">✅ 승인</button>
+          <button class="vi-btn" id="vi-btn-${i}-conditional" onclick="setStatus(${i},'conditional')">⚠️ 조건부</button>
+          <button class="vi-btn" id="vi-btn-${i}-rejected"  onclick="setStatus(${i},'rejected')">❌ 반려</button>
+        </div>
+        <textarea class="vi-comment" id="vi-cmt-${i}" rows="6"
+          placeholder="${isCustom ? '추가 검토 내용을 입력해주세요' : '코멘트를 입력해주세요 (선택)'}"
+          oninput="states[${i}].comment = this.value; autoResize(this)"
+          onfocus="this.closest('.vi-card').scrollIntoView({ behavior: 'smooth', block: 'start' })"
+        ></textarea>
+      </div>
+    `
+    list.appendChild(card)
+  }
+
+  // 5줄 기준 최소 높이: 13px × 1.6 × 5 + padding 20px = 124px
+  const TEXTAREA_MIN_H = 124
+
+  function autoResize(el) {
+    el.style.height = 'auto'
+    el.style.height = Math.max(el.scrollHeight, TEXTAREA_MIN_H) + 'px'
+    const card = el.closest('.vi-card')
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }
+
+  // ── 상태 업데이트 ────────────────────────────────────────────────────────────
+  function setStatus(index, status) {
+    states[index].status = status
+
+    const card = document.getElementById(`vi-${index}`)
+    const isCustom = violations[index]?.isCustom
+    card.className = `vi-card${isCustom ? ' custom' : ''} done-${status}`
+
+    ;['approved', 'conditional', 'rejected'].forEach(s => {
+      document.getElementById(`vi-btn-${index}-${s}`).className =
+        `vi-btn${status === s ? ` sel-${s}` : ''}`
+    })
+
+    const cmt = document.getElementById(`vi-cmt-${index}`)
+    cmt.placeholder = status === 'approved' ? '코멘트 (선택)' : '수정이 필요한 내용을 입력해주세요'
+
+    drawMarkers()
+    updateProgress()
+  }
+
+  // ── 진행률 업데이트 ──────────────────────────────────────────────────────────
+  function updateProgress() {
+    const done = states.filter(s => s.status !== null).length
+    const total = violations.length
+    const pct = total > 0 ? (done / total) * 100 : 0
+
+    document.getElementById('progress-fill').style.width = pct + '%'
+    const label = document.getElementById('progress-label')
+    label.textContent = `${done} / ${total}`
+    label.className = done === total ? 'progress-text done' : 'progress-text'
+    document.getElementById('count-text').innerHTML = `<span>${done}</span> / ${total} 완료`
+    document.getElementById('submit-btn').disabled = done < total
+  }
+
+  // ── 마커 위치 지정 ────────────────────────────────────────────────────────────
+  function startPlacing(index) {
+    addingAnnotation = false
+    const btn = document.getElementById('add-ann-btn')
+    if (btn) btn.className = 'add-ann-btn'
+
+    placingFor = placingFor === index ? null : index
+    updatePlacingUI()
+  }
+
+  function updatePlacingUI() {
+    const canvas = document.getElementById('ann-canvas')
+    const hint = document.getElementById('placing-hint')
+
+    violations.forEach((_, i) => {
+      const pinBtn = document.getElementById(`vi-pin-${i}`)
+      const card = document.getElementById(`vi-${i}`)
+      if (!pinBtn || !card) return
+
+      if (i === placingFor) {
+        pinBtn.className = 'vi-pin-btn placing'
+        pinBtn.textContent = '🎯 클릭으로 위치 선택'
+        card.classList.add('placing-active')
+      } else {
+        const pinned = states[i]?.markerX !== null
+        pinBtn.className = `vi-pin-btn${pinned ? ' pinned' : ''}`
+        pinBtn.textContent = pinned ? '✓ 위치표시' : '📍 위치'
+        card.classList.remove('placing-active')
+      }
+    })
+
+    const isAnyPlacing = placingFor !== null || addingAnnotation
+    if (canvas) canvas.className = isAnyPlacing ? 'placing' : ''
+    if (hint) {
+      hint.style.display = isAnyPlacing ? 'block' : 'none'
+      if (placingFor !== null) hint.textContent = '스크린샷에서 위치를 클릭해주세요'
+    }
+  }
+
+  // ── 캔버스 초기화 ────────────────────────────────────────────────────────────
+  function setupCanvas() {
+    const img = document.getElementById('screenshot-img')
+    const canvas = document.getElementById('ann-canvas')
+    if (!img || !canvas) return
+
+    function sync() {
+      canvas.width = img.offsetWidth
+      canvas.height = img.offsetHeight
+      drawMarkers()
+    }
+
+    function initZoom() {
+      imgNaturalW = img.naturalWidth
+      imgNaturalH = img.naturalHeight
+      fitZoom = calcFitZoom()
+      zoom = fitZoom
+      panX = 0; panY = 0
+      applyTransform(false)
+      sync()
+    }
+
+    if (img.complete && img.naturalWidth) initZoom()
+    else img.addEventListener('load', initZoom)
+
+    window.addEventListener('resize', () => {
+      const newFit = calcFitZoom()
+      if (Math.abs(zoom - fitZoom) < 0.05) zoom = newFit
+      fitZoom = newFit
+      sync()
+      applyTransform(false)
+    })
+
+    canvas.addEventListener('click', (e) => {
+      if (didDrag) return
+
+      const rect = canvas.getBoundingClientRect()
+      const scaleX = canvas.width / rect.width
+      const scaleY = canvas.height / rect.height
+      const nx = ((e.clientX - rect.left) * scaleX) / canvas.width
+      const ny = ((e.clientY - rect.top) * scaleY) / canvas.height
+
+      if (addingAnnotation) {
+        addingAnnotation = false
+        const btn = document.getElementById('add-ann-btn')
+        if (btn) btn.className = 'add-ann-btn'
+        const hint = document.getElementById('placing-hint')
+        if (hint) hint.style.display = 'none'
+        canvas.className = ''
+        addCustomAnnotation(nx, ny)
+        return
+      }
+
+      if (placingFor === null) return
+      states[placingFor].markerX = nx
+      states[placingFor].markerY = ny
+
+      const pinBtn = document.getElementById(`vi-pin-${placingFor}`)
+      if (pinBtn) { pinBtn.className = 'vi-pin-btn pinned'; pinBtn.textContent = '✓ 위치표시' }
+
+      placingFor = null
+      updatePlacingUI()
+      drawMarkers()
+    })
+  }
+
+  // ── 마커 그리기 ─────────────────────────────────────────────────────────────
+  function drawMarkers() {
+    const canvas = document.getElementById('ann-canvas')
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    const STATUS_COLOR = { approved: '#10b981', conditional: '#f59e0b', rejected: '#ef4444' }
+
+    states.forEach((s, i) => {
+      if (s.markerX === null) return
+      const x = s.markerX * canvas.width
+      const y = s.markerY * canvas.height
+      const color = STATUS_COLOR[s.status] ?? (violations[i]?.isCustom ? '#8b5cf6' : '#3b82f6')
+      const r = 14
+
+      ctx.shadowColor = 'rgba(0,0,0,0.35)'
+      ctx.shadowBlur = 7
+      ctx.shadowOffsetY = 2
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, 2 * Math.PI)
+      ctx.fillStyle = color
+      ctx.fill()
+
+      ctx.shadowColor = 'transparent'
+      ctx.shadowBlur = 0
+      ctx.shadowOffsetY = 0
+      ctx.fillStyle = '#fff'
+      ctx.font = `bold 11px -apple-system, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(i + 1), x, y)
+    })
+  }
+
+  // ── 제출 ────────────────────────────────────────────────────────────────────
+  async function handleSubmit() {
+    const btn = document.getElementById('submit-btn')
+    btn.textContent = '전송 중...'
+    btn.disabled = true
+
+    try {
+      const res = await fetch(`${EDGE_URL}/review-submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          review_id: reviewId,
+          reviewer_name: '조지혜',
+          violation_reviews: states.map((s, i) => ({
+            violation_index: i,
+            violation_id: violations[i]?.id ?? String(i),
+            status: s.status,
+            comment: s.comment || null,
+            marker_x: s.markerX,
+            marker_y: s.markerY,
+          })),
+        }),
+      })
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      showDone()
+    } catch (err) {
+      btn.textContent = '검토 결과 보내기'
+      btn.disabled = false
+      alert('전송에 실패했습니다. 다시 시도해주세요.')
+    }
+  }
+
+  function showDone() {
+    document.getElementById('app').innerHTML = `
+      <div class="center-screen">
+        <div class="icon">✅</div>
+        <div class="title">검토 완료!</div>
+        <div class="desc">결과가 슬랙으로 전달됐어요</div>
+      </div>
+    `
+  }
+
+  function showError(title, desc) {
+    document.getElementById('app').innerHTML = `
+      <div class="center-screen">
+        <div class="icon">⚠️</div>
+        <div class="title">${esc(title)}</div>
+        <div class="desc">${esc(desc)}</div>
+      </div>
+    `
+  }
+
+  function esc(str) {
+    if (!str) return ''
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  }
+
+  init()
+</script>
+</body>
+</html>
