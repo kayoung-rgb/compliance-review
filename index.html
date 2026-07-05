@@ -288,12 +288,14 @@
       font-size: 13px;
       line-height: 1.6;
       resize: none;
-      overflow-y: hidden;
+      overflow: hidden;
       outline: none;
       font-family: inherit;
       color: #374151;
       transition: border-color 0.12s;
       background: #fafafa;
+      min-height: 124px;
+      height: 124px;
     }
     .vi-comment:focus { border-color: #3b82f6; background: #fff; }
 
@@ -631,11 +633,6 @@
     const list = document.getElementById('vi-list')
     violations.forEach((_, i) => appendViolationCard(i, list))
 
-    // textarea 초기 높이 적용 (DOM 렌더링 후)
-    requestAnimationFrame(() => {
-      document.querySelectorAll('.vi-comment').forEach(initTextareaHeight)
-    })
-
     if (review.preview_image_url) {
       setupCanvas()
       setupZoom()
@@ -674,19 +671,12 @@
     list.appendChild(card)
   }
 
-  // textarea 초기 높이 설정 + 자동 확장
-  function initTextareaHeight(el) {
-    const style = getComputedStyle(el)
-    const lineHeight = parseFloat(style.lineHeight)
-    const paddingTop = parseFloat(style.paddingTop)
-    const paddingBottom = parseFloat(style.paddingBottom)
-    el.style.height = (5 * lineHeight + paddingTop + paddingBottom) + 'px'
-  }
+  // 5줄 기준 최소 높이: 13px × 1.6 × 5 + padding 20px = 124px
+  const TEXTAREA_MIN_H = 124
 
   function autoResize(el) {
     el.style.height = 'auto'
-    el.style.height = el.scrollHeight + 'px'
-    // 카드 헤더가 스크롤 밖으로 밀려나지 않도록
+    el.style.height = Math.max(el.scrollHeight, TEXTAREA_MIN_H) + 'px'
     const card = el.closest('.vi-card')
     if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
