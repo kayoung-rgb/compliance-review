@@ -427,26 +427,35 @@
     const canvas = document.getElementById('ann-canvas')
     if (!canvas || !states[index] || states[index].markerX === null) return
     let frame = 0
+    const TOTAL = 24
     const s = states[index]
     const STATUS_COLOR = { approved: '#10b981', conditional: '#f59e0b', rejected: '#ef4444' }
-    const color = STATUS_COLOR[s.status] ?? '#3b82f6'
+    const color = STATUS_COLOR[s.status] ?? '#ef4444'
 
     function draw() {
       const ctx = canvas.getContext('2d')
       drawMarkers()
       const x = s.markerX * canvas.width
       const y = s.markerY * canvas.height
-      const r = 14 + (frame / 8) * 18
-      const alpha = 1 - frame / 8
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, 2 * Math.PI)
-      ctx.strokeStyle = color
-      ctx.lineWidth = 2
-      ctx.globalAlpha = alpha
-      ctx.stroke()
+      const baseR = Math.max(14, canvas.width * 0.018)
+
+      // 2개 파동, TOTAL/2 프레임 간격으로 순차 발산
+      for (let w = 0; w < 2; w++) {
+        const f = frame - w * (TOTAL / 2)
+        if (f < 0 || f > TOTAL) continue
+        const t = f / TOTAL
+        const r = baseR + t * baseR * 3
+        const alpha = (1 - t) * 0.9
+        ctx.globalAlpha = alpha
+        ctx.beginPath()
+        ctx.arc(x, y, r, 0, 2 * Math.PI)
+        ctx.strokeStyle = color
+        ctx.lineWidth = 3.5
+        ctx.stroke()
+      }
       ctx.globalAlpha = 1
       frame++
-      if (frame < 8) requestAnimationFrame(draw)
+      if (frame < TOTAL + TOTAL / 2) requestAnimationFrame(draw)
     }
     requestAnimationFrame(draw)
   }
