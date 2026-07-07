@@ -231,6 +231,15 @@
     .vi-card.done-rejected .vi-num { background: #ef4444; }
 
     .vi-title { font-size: 12px; font-weight: 500; flex: 1; line-height: 1.4; }
+    .vi-title-input {
+      font-size: 12px; font-weight: 500; flex: 1; line-height: 1.4;
+      border: none; outline: none; background: transparent;
+      padding: 0; margin: 0; width: 100%; color: inherit;
+      cursor: text;
+    }
+    .vi-title-input:focus {
+      background: #f3f4f6; border-radius: 4px; padding: 1px 4px; margin: -1px -4px;
+    }
     .vi-anchor-hint { font-size: 10px; color: #9ca3af; flex-shrink: 0; }
     .vi-header:hover .vi-anchor-hint { color: #3b82f6; }
 
@@ -599,7 +608,13 @@
     card.innerHTML = `
       <div class="vi-header" onclick="panToMarker(${i})">
         <div class="vi-num" id="vi-num-${i}">${i + 1}</div>
-        <div class="vi-title">${esc(v.title ?? `항목 ${i+1}`)}</div>
+        ${isCustom
+          ? `<input class="vi-title-input" value="${esc(v.title ?? `추가 검토 ${i+1}`)}"
+               onclick="event.stopPropagation()"
+               oninput="violations[${i}].title = this.value"
+               placeholder="제목 입력" />`
+          : `<div class="vi-title">${esc(v.title ?? `항목 ${i+1}`)}</div>`
+        }
         <span class="vi-anchor-hint" id="vi-anchor-${i}">↖ 위치로</span>
         <button class="vi-pin-btn" id="vi-pin-${i}" onclick="event.stopPropagation(); startPlacing(${i})">📍 위치</button>
       </div>
