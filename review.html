@@ -766,33 +766,7 @@
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    const STATUS_COLOR = { approved: '#10b981', conditional: '#f59e0b', rejected: '#ef4444' }
-
-    states.forEach((s, i) => {
-      if (s.markerX === null) return
-      const x = s.markerX * canvas.width
-      const y = s.markerY * canvas.height
-      const color = STATUS_COLOR[s.status] ?? (violations[i]?.isCustom ? '#8b5cf6' : '#3b82f6')
-      const r = 14
-
-      ctx.shadowColor = 'rgba(0,0,0,0.35)'
-      ctx.shadowBlur = 7
-      ctx.shadowOffsetY = 2
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, 2 * Math.PI)
-      ctx.fillStyle = color
-      ctx.fill()
-
-      ctx.shadowColor = 'transparent'
-      ctx.shadowBlur = 0
-      ctx.shadowOffsetY = 0
-      ctx.fillStyle = '#fff'
-      ctx.font = `bold 11px -apple-system, sans-serif`
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(String(i + 1), x, y)
-    })
+    // 마커는 제출 시 이미지에 합성(빨간색)되어 있으므로 canvas에 다시 그리지 않음
   }
 
   // ── 제출 ────────────────────────────────────────────────────────────────────
