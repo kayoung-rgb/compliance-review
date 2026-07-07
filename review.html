@@ -240,6 +240,12 @@
     .vi-title-input:focus {
       background: #f3f4f6; border-radius: 4px; padding: 1px 4px; margin: -1px -4px;
     }
+    .vi-del-btn {
+      flex-shrink: 0; border: none; background: none; cursor: pointer;
+      font-size: 14px; color: #d1d5db; padding: 2px 4px; border-radius: 4px;
+      line-height: 1; transition: color 0.1s;
+    }
+    .vi-del-btn:hover { color: #ef4444; }
     .vi-anchor-hint { font-size: 10px; color: #9ca3af; flex-shrink: 0; }
     .vi-header:hover .vi-anchor-hint { color: #3b82f6; }
 
@@ -512,6 +518,21 @@
     if (newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   }
 
+  function removeCustomAnnotation(index) {
+    violations.splice(index, 1)
+    states.splice(index, 1)
+
+    // 카드 목록 전체 재렌더
+    const list = document.getElementById('vi-list')
+    if (list) {
+      list.innerHTML = ''
+      violations.forEach((_, i) => appendViolationCard(i, list))
+    }
+
+    drawMarkers()
+    updateProgress()
+  }
+
   // ── 초기화 ──────────────────────────────────────────────────────────────────
   async function init() {
     if (!reviewId) return showError('리뷰 ID가 없습니다.', '슬랙 메시지의 검토하기 버튼을 다시 클릭해주세요.')
@@ -617,6 +638,7 @@
         }
         <span class="vi-anchor-hint" id="vi-anchor-${i}">↖ 위치로</span>
         <button class="vi-pin-btn" id="vi-pin-${i}" onclick="event.stopPropagation(); startPlacing(${i})">📍 위치</button>
+        ${isCustom ? `<button class="vi-del-btn" onclick="event.stopPropagation(); removeCustomAnnotation(${i})" title="삭제">✕</button>` : ''}
       </div>
       <div class="vi-body">
         <div class="vi-buttons">
