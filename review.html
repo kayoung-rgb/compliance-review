@@ -765,7 +765,8 @@
     function sync() {
       canvas.width = img.offsetWidth
       canvas.height = img.offsetHeight
-      drawMarkers()
+      // 뱃지가 이미 이미지에 합성되어 있으므로 초기 마커는 그리지 않음
+      // (클릭 시 pulseMarker로만 인터랙션)
     }
 
     function initZoom() {
@@ -775,12 +776,15 @@
       zoom = fitZoom
       panX = 0; panY = 0
       applyTransform(false)
-      // 마커 위치 없는 항목에 기본 위치 자동 배분
+      // 마커 위치 없는 항목에 기본 위치 자동 배분 (no-match 센티넬 -1은 제외)
       const n = violations.length
       states.forEach((s, i) => {
         if (s.markerX === null) {
           s.markerX = 0.5
           s.markerY = (i + 0.5) / n
+        } else if (s.markerX < 0) {
+          s.markerX = null  // 매칭 실패 → 마커 미표시
+          s.markerY = null
         }
       })
       sync()
