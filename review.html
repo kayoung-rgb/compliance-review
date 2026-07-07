@@ -372,6 +372,8 @@
   let states = []
   let placingFor = null
   let addingAnnotation = false
+  let draggingMarkerIndex = null
+  let didDragMarker = false
   let imgNaturalW = 0, imgNaturalH = 0
 
   // ── 줌/패닝 상태 ─────────────────────────────────────────────────────────────
@@ -736,14 +738,55 @@
 
     window.addEventListener('resize', () => { sync() })
 
+    // ── 마커 드래그 ────────────────────────────────────────────────────────────
+    canvas.addEventListener('mousedown', (e) => {
+      if (addingAnnotation || placingFor !== null) return
+      const rect = canvas.getBoundingClientRect()
+      const cx = (e.clientX - rect.left) * (canvas.width / rect.width)
+      const cy = (e.clientY - rect.top) * (canvas.height / rect.height)
+      const idx = getMarkerAtCanvas(cx, cy)
+      if (idx !== -1) {
+        draggingMarkerIndex = idx
+        didDragMarker = false
+        canvas.style.cursor = 'grabbing'
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    })
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect()
+
+      if (draggingMarkerIndex !== null) {
+        states[draggingMarkerIndex].markerX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
+        states[draggingMarkerIndex].markerY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
+        didDragMarker = true
+        drawMarkers()
+        return
+      }
+
+      // hover cursor
+      if (addingAnnotation || placingFor !== null) return
+      const cx = (e.clientX - rect.left) * (canvas.width / rect.width)
+      const cy = (e.clientY - rect.top) * (canvas.height / rect.height)
+      canvas.style.cursor = getMarkerAtCanvas(cx, cy) !== -1 ? 'grab' : ''
+    })
+
+    window.addEventListener('mouseup', () => {
+      if (draggingMarkerIndex !== null) {
+        draggingMarkerIndex = null
+        canvas.style.cursor = ''
+        drawMarkers()
+      }
+    })
+
+    // ── 클릭으로 마커 배치 ──────────────────────────────────────────────────────
     canvas.addEventListener('click', (e) => {
-      if (didDrag) return
+      if (didDrag || didDragMarker) { didDragMarker = false; return }
 
       const rect = canvas.getBoundingClientRect()
-      const scaleX = canvas.width / rect.width
-      const scaleY = canvas.height / rect.height
-      const nx = ((e.clientX - rect.left) * scaleX) / canvas.width
-      const ny = ((e.clientY - rect.top) * scaleY) / canvas.height
+      const nx = (e.clientX - rect.left) / rect.width
+      const ny = (e.clientY - rect.top) / rect.height
 
       if (addingAnnotation) {
         addingAnnotation = false
@@ -775,7 +818,47 @@
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    // 마커는 제출 시 이미지에 합성(빨간색)되어 있으므로 canvas에 다시 그리지 않음
+
+    // 원본 위반 마커는 이미지에 합성됨 — 커스텀 어노테이션만 canvas에 그림
+    const r = Math.max(14, canvas.width * 0.018)
+    states.forEach((s, i) => {
+      if (!violations[i]?.isCustom || s.markerX === null) return
+      const x = s.markerX * canvas.width
+      const y = s.markerY * canvas.height
+      const isDragging = draggingMarkerIndex === i
+
+      ctx.shadowColor = 'rgba(0,0,0,0.35)'
+      ctx.shadowBlur = isDragging ? 12 : 7
+      ctx.shadowOffsetY = 2
+      ctx.beginPath()
+      ctx.arc(x, y, isDragging ? r * 1.15 : r, 0, 2 * Math.PI)
+      ctx.fillStyle = '#8b5cf6'
+      ctx.fill()
+
+      ctx.shadowColor = 'transparent'
+      ctx.shadowBlur = 0
+      ctx.shadowOffsetY = 0
+      ctx.fillStyle = '#fff'
+      ctx.font = `bold ${Math.round(r * 0.85)}px -apple-system, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(String(i + 1), x, y)
+    })
+  }
+
+  function getMarkerAtCanvas(cx, cy) {
+    const canvas = document.getElementById('ann-canvas')
+    if (!canvas) return -1
+    const hitR = Math.max(20, canvas.width * 0.025)
+    for (let i = states.length - 1; i >= 0; i--) {
+      if (!violations[i]?.isCustom) continue
+      const s = states[i]
+      if (s.markerX === null) continue
+      const mx = s.markerX * canvas.width
+      const my = s.markerY * canvas.height
+      if (Math.hypot(cx - mx, cy - my) < hitR) return i
+    }
+    return -1
   }
 
   // ── 제출 ────────────────────────────────────────────────────────────────────
